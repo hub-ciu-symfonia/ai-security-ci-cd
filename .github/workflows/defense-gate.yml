@@ -1,0 +1,28 @@
+name: Defense gate - scan AI-generated PR diffs
+
+on:
+  pull_request:
+    types: [opened, synchronize, labeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  scan-diff:
+    if: contains(github.event.pull_request.labels.*.name, 'ai-generated')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Produce the PR diff
+        run: git diff origin/${{ github.event.pull_request.base.ref }}...HEAD > pr.diff
+
+      - name: Scan for the exfiltration pattern
+        run: dotnet run --project src/Defense.Cli -- pr.diff

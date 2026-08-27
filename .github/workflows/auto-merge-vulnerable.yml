@@ -1,0 +1,21 @@
+name: Auto-merge AI-generated PRs (VULNERABLE - naive config, no review gate)
+
+on:
+  pull_request_target:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: contains(github.event.pull_request.labels.*.name, 'ai-generated')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge for this AI-generated PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_URL="${{ github.event.pull_request.html_url }}"
+          gh pr merge --auto --squash "$PR_URL" || gh pr merge --squash "$PR_URL"
