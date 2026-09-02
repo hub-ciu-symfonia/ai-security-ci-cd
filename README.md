@@ -3,14 +3,18 @@
 > ⚠️ REPOZYTORIUM EDUKACYJNE. Wszystkie sekrety w `appsettings.json` sa falszywe (FAKE_*).
 > `examples/poisoned-issue.md` zawiera DEMONSTRACYJNY, zlosliwy payload wzorowany na realnych
 > incydentach 2025 (Amazon Q Developer Extension, GitLab Duo - zob. `../../materials/incidents/cicd-prompt-injection.md`).
-> Ten payload jest niewidoczny w renderowanym Markdown na GitHubie (komentarz HTML), ale w pelni
-> widoczny dla agenta AI odczytujacego surowa tresc issue - to jest sedno ataku.
+> Ten payload jest niewidoczny w renderowanym Markdown na GitHubie - instrukcja jest zakodowana w
+> niewidocznych znakach Unicode (bloku "Tags", U+E0000-U+E007F, technika "ASCII smuggling" znana z
+> realnych atakow na LLM z 2024), a nie w komentarzu HTML. Komentarze HTML (`<!-- ... -->`) sa
+> konwertowane przez warstwe sanityzacji GitHub Agentic Workflows na nieszkodliwy tekst
+> (`(!-- ... --)`) zanim dotrą do modelu, wiec ta technika nie zadziala z tym silnikiem - stad
+> uzycie niewidocznych znakow Unicode, ktore tej sanityzacji nie podlegaja.
 
 ## Scenariusz ataku
 
 1. Atakujacy (albo, w tym demo, sam prezenter) tworzy nowe issue w repozytorium, uzywajac tresci
-   z `examples/poisoned-issue.md` - zgloszenie wyglada jak normalny bug report, ale zawiera ukryty
-   komentarz HTML z instrukcja dla agenta AI.
+   z `examples/poisoned-issue.md` - zgloszenie wyglada jak normalny bug report, ale zawiera ukryta
+   instrukcje dla agenta AI zakodowana w niewidocznych znakach Unicode.
 2. Workflow `.github/workflows/auto-fix.yml` uruchamia `AutoFixAgent` na nowym issue: agent
    odczytuje pelna, surowa tresc issue (w tym ukryty komentarz), prosi model Claude (przez Amazon
    Bedrock) o poprawiony plik, i otwiera pull request z etykieta `ai-generated`.
@@ -70,6 +74,59 @@
    AI-generated (wymog human review zawsze), sandboxing agenta (ograniczone uprawnienia tokena,
    brak dostepu do secrets produkcyjnych), secret scanning (np. gitleaks) jako dodatkowy required
    check, code owners dla plikow workflow.
+
+## Resetowanie demo (cofanie zmian po uruchomieniu workflow)
+
+Kazde odpalenie sciezki atakowej tworzy trwale artefakty w repozytorium GitHub: branch
+`auto-fix/issue-<N>`, pull request, ewentualnie merge do `main` (jesli `auto-merge-vulnerable.yml`
+zdazyl zmergowac PR przed wylaczeniem regul ochrony). Przed powtorka demo (albo przed przejsciem
+z czesci "atak" do czesci "obrona") warto to posprzatac.
+
+**Zalecenie**: przed pierwszym uruchomieniem demo, oznacz aktualny, czysty stan brancha `main`
+tagiem - pozwoli to jednym poleceniem wrocic do punktu startowego niezaleznie od tego, ile razy
+demo zostanie powtorzone:
+
+```bash
+git tag demo-baseline
+git push origin demo-baseline
+```
+
+Po kazdym przebiegu demo:
+
+1. **Zamknij PR agenta i usun jego branch** (jedna komenda robi oba):
+   ```bash
+   gh pr close <NUMER_PR> --delete-branch
+   ```
+   Jesli branch zostal juz usuniety automatycznie po merge, usun go tylko jesli nadal istnieje:
+   ```bash
+   git push origin --delete auto-fix/issue-<NUMER_ISSUE>
+   ```
+
+2. **Zamknij (lub usun) issue z payloadem**:
+   ```bash
+   gh issue close <NUMER_ISSUE>
+   # albo, jesli chcesz usunac je calkowicie (wymaga uprawnien admina repo):
+   gh issue delete <NUMER_ISSUE> --yes
+   ```
+
+3. **Jesli PR zostal zmergowany do `main`** (scenariusz bez wlaczonej obrony) - przywroc `main` do
+   stanu sprzed demo. W repozytorium uzywanym wylacznie do tego demo (bez innych osob pracujacych
+   na `main`) najprostsze jest twarde zresetowanie do tagu bazowego:
+   ```bash
+   git fetch origin
+   git reset --hard demo-baseline
+   git push origin main --force
+   ```
+   Jesli wolisz zachowac historie (np. repo jest wspoldzielone), uzyj zamiast tego `git revert` na
+   merge-commicie dodanym przez `auto-merge-vulnerable.yml`:
+   ```bash
+   git revert -m 1 <SHA_MERGE_COMMITU>
+   git push origin main
+   ```
+
+4. **Przelaczajac sie miedzy czescia "atak" i "obrona"**: pamietaj o wlaczeniu/wylaczeniu required
+   checka `scan-diff` w Settings -> Branches dla `main` (patrz sekcja "Obrona - live") - to ustawienie
+   nie resetuje sie automatycznie miedzy przebiegami.
 
 ## Testy (nie wymagaja GitHub credentials)
 
