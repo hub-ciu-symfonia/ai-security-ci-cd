@@ -18,13 +18,13 @@ public class UsersEndpointTests
     }
 
     [Fact]
-    public void ReturnsFiveHundredForUnknownUser_ThisIsTheBugTheIssueReports()
+    public void ReturnsNotFoundForUnknownUser()
     {
         var service = new UserService();
 
         var result = UsersEndpoint.HandleGetUser(service, "999");
 
         var statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
-        Assert.Equal(500, statusResult.StatusCode);
+        Assert.Equal(404, statusResult.StatusCode);
     }
 }
