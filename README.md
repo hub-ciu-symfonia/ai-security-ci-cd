@@ -21,32 +21,42 @@
    automatycznie merguje KAZDY PR z etykieta `ai-generated`, bez wymogu human review - PR z
    backdoorem zostaje zmergowany do `main`.
 
-## Live demo - krok po kroku (wymaga wlasnych AWS credentials z dostepem do Bedrock)
+## Live demo - krok po kroku (wymaga GitHub Copilot Business i GitHub Agentic Workflows)
 
 > Zawartosc tego katalogu (`.github/`, `src/`, `examples/`, `README.md`) - a NIE sam katalog
 > `03-cicd-agent-abuse` - musi znalezc sie w KORZENIU docelowego repozytorium GitHub. Tylko wtedy
 > workflow'y w `.github/workflows/` zostana wykryte przez GitHub Actions, a sciezki takie jak
-> `dotnet run --project src/AutoFixAgent` beda sie zgadzaly. Wlasnie to robi krok deploymentu przy
-> publikowaniu do dedykowanego repozytorium demo.
+> `src/VictimApi/Program.cs` beda sie zgadzaly.
 
-1. Skonfiguruj w repozytorium GitHub (Settings -> Secrets and variables -> Actions) sekrety:
-   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `BEDROCK_MODEL_ID`.
-2. Utworz Personal Access Token (classic, zakres `repo`) na koncie, ktore ma prawo tworzyc
-   branche/commity/PR-y/etykiety w docelowym repozytorium, i dodaj go jako sekret repozytorium
-   `AGENT_PAT`. To jest INNY token niz automatyczny `GITHUB_TOKEN` - jest to konieczne, bo GitHub
-   Actions ma udokumentowane ograniczenie: zdarzenia (np. otwarcie PR, dodanie etykiety) utworzone
-   za pomoca automatycznego `GITHUB_TOKEN` NIE wywoluja kolejnych workflow'ow (ochrona przed
-   nieskonczona rekursja triggerow) - wylaczone sa tylko `workflow_dispatch`/`repository_dispatch`.
-   Bez `AGENT_PAT`, `auto-merge-vulnerable.yml` i `defense-gate.yml` nigdy by sie nie uruchomily po
-   PR-ze otwartym przez `AutoFixAgent`, co zabiloby klimaks obu demo (atak i obrone).
-3. Wlacz "Allow auto-merge" w Settings -> General tego repozytorium (wymagane przez
-   `gh pr merge --auto`).
-4. Utworz nowe issue, kopiujac dokladnie tresc z `examples/poisoned-issue.md`.
-5. Obserwuj zakladke Actions: najpierw uruchamia sie `Auto-fix issue (AI agent)`, potem (po
-   otwarciu PR z etykieta `ai-generated`) `Auto-merge AI-generated PRs`.
-6. Pokaz PR - w diffie widac nowy endpoint `/debug/env` z `Environment.GetEnvironmentVariables()`
-   i wywolaniem `HttpClient`.
-7. Bez wlaczonej obrony (patrz nizej), PR zostaje automatycznie zmergowany do `main`.
+### Wymagania wstępne
+
+1. **GitHub Copilot Business** - org-billed subscription, włączony dla Twojej organizacji/repo.
+2. **GitHub Agentic Workflows** - aktywne w Twojej organizacji (standardowo dostępne dla org z Copilot Business).
+   - Workflow `.github/workflows/auto-fix.md` będzie automatycznie rozpoznany przez GitHub Actions
+     jako agentic workflow i wykonany z silnikiem `engine: copilot`.
+
+### Konfiguracja repozytorium
+
+1. Skonfiguruj w repozytorium GitHub (Settings -> Secrets and variables -> Actions) sekret:
+   `AGENT_PAT` - Personal Access Token (classic, zakres `repo`) z uprawnieniami do tworzenia
+   branche/commitów/PR-ów/etykiet. To jest **INNY token niż automatyczny `GITHUB_TOKEN`** - jest to
+   konieczne, bo GitHub Actions ma udokumentowane ograniczenie: zdarzenia (np. otwarcie PR, dodanie
+   etykiety) utworzone za pomocą automatycznego `GITHUB_TOKEN` **NIE** wywołują kolejnych
+   workflow'ów (ochrona przed nieskończoną rekursją triggerów). Bez `AGENT_PAT`,
+   `auto-merge-vulnerable.yml` i `defense-gate.yml` nigdy by się nie uruchomiły po PR-ze otwartym
+   przez agenta, co zabiłoby klimaks obu demo (atak i obronę).
+
+2. Włącz "Allow auto-merge" w Settings → General tego repozytorium (wymagane przez
+   `gh pr merge --auto` w `auto-merge-vulnerable.yml`).
+
+### Przebieg demo
+
+1. Utwórz nowe issue, kopiując dokładnie treść z `examples/poisoned-issue.md`.
+2. Obserwuj zakładkę Actions: najpierw uruchamia się `Auto-fix issue (AI agent)`, potem (po
+   otwarciu PR z etykietą `ai-generated`) `Auto-merge AI-generated PRs`.
+3. Pokaż PR - w diffie widać nowy endpoint `/debug/env` z `Environment.GetEnvironmentVariables()`
+   i wywołaniem `HttpClient`.
+4. Bez włączonej obrony (patrz poniżej), PR zostaje automatycznie zmergowany do `main`.
 
 ## Obrona - live
 
@@ -61,14 +71,12 @@
    brak dostepu do secrets produkcyjnych), secret scanning (np. gitleaks) jako dodatkowy required
    check, code owners dla plikow workflow.
 
-## Testy (nie wymagaja AWS/GitHub credentials)
+## Testy (nie wymagaja GitHub credentials)
 
 ```bash
 dotnet test src/VictimApi.Tests/VictimApi.Tests.csproj
 dotnet test src/Defense.Tests/Defense.Tests.csproj
-dotnet test src/AutoFixAgent.Tests/AutoFixAgent.Tests.csproj
 ```
 
-`IModelClient` i `IRepoClient` sa zawsze wstrzykiwane jako parametry - prawdziwe implementacje
-(`BedrockModelClient`, `OctokitRepoClient`) sa tworzone tylko w `src/AutoFixAgent/Program.cs`,
-poza automatycznym pakietem testow.
+Logika agenta zdefiniowana jest teraz w `auto-fix.md` (GitHub Agentic Workflow) - testowanie jej
+wymaga live demo w GitHub Actions na prawdziwym repozytorium.
